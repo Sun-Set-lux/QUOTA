@@ -1,0 +1,99 @@
+<script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
+<script>
+  // Initialize Netlify Identity
+  netlifyIdentity.init();
+
+  // Example roles and weekly max quotas
+  const roleQuotas = {
+    'Ownership': Infinity,
+    'Management': 50,
+    'Administrator': 30,
+    'Moderator': 20
+  };
+
+  // Get current user
+  let user = netlifyIdentity.currentUser();
+
+  // Utility: check if today is Monday
+  function isMonday() {
+    const today = new Date();
+    return today.getDay() === 1; // 0 = Sunday, 1 = Monday
+  }
+
+  // Initialize user metadata if missing
+  function initUser() {
+    if (!user) return;
+
+    // Set default metadata if missing
+    if (!user.user_metadata) user.user_metadata = {};
+    const role = user.user_metadata.role || 'Moderator';
+    const lastReset = user.user_metadata.lastReset || null;
+
+    // Reset quota if it's Monday and hasn't been reset today
+    if (isMonday() && lastReset !== new Date().toDateString()) {
+      user.user_metadata.quota = roleQuotas[role];
+      user.user_metadata.lastReset = new Date().toDateString();
+      user.update(user.user_metadata).then(() => {
+        displayQuota();
+      });
+    } else if (user.user_metadata.quota === undefined) {
+      // First-time setup
+      user.user_metadata.quota = roleQuotas[role];
+      user.user_metadata.lastReset = new Date().toDateString();
+      user.update(user.user_metadata).then(() => displayQuota());
+    } else {
+      displayQuota();
+    }
+  }
+
+  // Display current quota
+  function displayQuota() {
+    if (!user) return;
+    const quota = user.user_metadata.quota;
+    document.getElementById('quota').textContent = quota;
+  }
+
+  // Check if user can perform action
+  function canPerformAction(actionType) {
+    if (!user) return false;
+    const role = user.user_metadata.role;
+    const quota = user.user_metadata.quota;
+
+    if (quota <= 0 && role !== 'Ownership') return false; // quota exceeded
+
+    switch (role) {
+      case 'Ownership': return true;
+      case 'Management': return actionType !== 'manageOwnership';
+      case 'Administrator': return actionType !== 'manageRoles';
+      case 'Moderator': return actionType === 'moderateContent';
+      default: return false;
+    }
+  }
+
+  // Reduce quota when an action is performed
+  function reduceQuota(amount = 1) {
+    if (!user) return;
+    if (user.user_metadata.role === 'Ownership') return; // unlimited
+
+    user.user_metadata.quota = Math.max(0, user.user_metadata.quota - amount);
+    user.update(user.user_metadata).then(() => displayQuota());
+  }
+
+  // Example: attach action to a button
+  document.addEventListener('DOMContentLoaded', () => {
+    initUser();
+
+    document.getElementById('actionButton').addEventListener('click', () => {
+      if (!canPerformAction('moderateContent')) {
+        alert('Action not allowed!');
+        return;
+      }
+      reduceQuota();
+      alert('Action performed!');
+    });
+  });
+</script>
+
+<!-- HTML -->
+<p>Your remaining quota: <span id="quota">0</span></p>
+<button id="actionButton">Perform Action</button>
