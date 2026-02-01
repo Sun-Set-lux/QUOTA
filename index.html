@@ -2,163 +2,120 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Klev Studio Staff System</title>
+<title>Klev’s Studio Staff Login</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
 body { font-family: Arial; background:#f4f4f4; }
-.container { width:360px; margin:40px auto; background:#fff; padding:20px; border-radius:6px; box-shadow:0 0 10px rgba(0,0,0,.15); border-top:4px solid #c40000;}
-h2,h3 { text-align:center; color:#c40000;}
-label { margin-top:10px; display:block; font-size:14px;}
-input,select,button { width:100%; padding:10px; margin-top:5px; }
-button { border:none; cursor:pointer; }
-#loginBtn { background:#c40000; color:#fff; margin-top:15px;}
-#logoutBtn { background:#c40000; color:#fff; margin-top:15px;}
-#addStaffBtn { background:#444; color:#fff; margin-top:10px;}
+#login-container {
+  width:320px; margin:50px auto; background:#fff; padding:20px;
+  border-radius:6px; box-shadow:0 0 10px rgba(0,0,0,.15);
+  border-top:4px solid #c40000;
+}
+h2,h3 { text-align:center; color:#c40000; }
+label { margin-top:10px; display:block; }
+input,textarea,button,select { width:100%; padding:10px; margin-top:5px; }
+button { cursor:pointer; border:none; }
+#loginBtn { background:#c40000; color:#fff; margin-top:15px; }
 .hidden { display:none; }
-.staffCard { border:1px solid #ddd; padding:10px; margin-top:10px; border-radius:5px;}
-.bar { height:18px; background:#eee; border-radius:10px; overflow:hidden; }
-.fill { height:100%; background:#4a90e2; }
-small { color:#666; }
+.task { border:1px solid #ddd; padding:10px; margin-top:10px; border-radius:5px; }
 </style>
+<script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
 </head>
 <body>
 
-<div class="container" id="loginBox">
+<div id="login-container" class="hidden">
 <h2>Staff Login</h2>
-<label>Email</label>
-<input id="email">
-<label>Password</label>
-<input id="password" type="password">
 <button id="loginBtn">Login</button>
-<p id="msg"></p>
 </div>
 
-<div class="container hidden" id="dashboard">
+<div id="login-container" id="dashboard" class="hidden">
 <h2>Dashboard</h2>
-<p><b>Logged in:</b> <span id="me"></span></p>
-<p><b>Role:</b> <span id="myRole"></span></p>
+<p><b>Email:</b> <span id="email"></span></p>
+<p><b>Role:</b> <span id="role"></span></p>
 
-<h3>Your Quota</h3>
-<div class="bar"><div class="fill" id="myBar"></div></div>
-<p><span id="myQuota"></span></p>
+<h3>Your Tasks</h3>
+<div id="myTasks"></div>
 
-<div id="manageSection" class="hidden">
-<h3>All Staff</h3>
-<div id="staffList"></div>
-
-<h3>Add Staff</h3>
-<input id="newEmail" placeholder="Email">
-<input id="newPass" placeholder="Password">
-<select id="newRole">
-<option>Moderator</option>
-<option>Administrator</option>
-<option>Management</option>
-<option>Ownership</option>
-</select>
-<button id="addStaffBtn">Add Staff</button>
+<div id="ownerPanel" class="hidden">
+<h3>Assign Task</h3>
+<select id="userSelect"></select>
+<textarea id="taskText" placeholder="What they need to do"></textarea>
+<button onclick="assignTask()">Assign</button>
 </div>
 
-<button id="logoutBtn">Logout</button>
+<button onclick="logout()" style="background:#c40000;color:#fff;margin-top:10px;">Logout</button>
 </div>
 
 <script>
-const MAX = { Moderator:20, Administrator:30, Management:50, Ownership:999 };
-const STORAGE='klev_staff';
+netlifyIdentity.init();
 
-function mondayReset(u){
-  const now=new Date();
-  if(now.getDay()!==1) return;
-  const last=new Date(u.lastReset||0);
-  if(last.toDateString()!==now.toDateString()){
-    u.quota=MAX[u.role];
-    u.lastReset=now.toISOString();
-  }
-}
+const loginBox = document.querySelectorAll('#login-container')[0];
+const dashboard = document.querySelectorAll('#login-container')[1];
 
-function loadUsers(){
-  return JSON.parse(localStorage.getItem(STORAGE)||'[]');
-}
-function saveUsers(u){ localStorage.setItem(STORAGE,JSON.stringify(u)); }
+document.getElementById('loginBtn').onclick = () => netlifyIdentity.open();
 
-if(!localStorage.getItem(STORAGE)){
-  saveUsers([
-    {email:'ownership@klev.studio',password:'suksbhkds',role:'Ownership',quota:MAX.Ownership},
-    {email:'add.login@klev.studio',password:'5Z^9^^Z@XSHkplUFc2dHQZ*7V7',role:'Management',quota:MAX.Management}
-  ]);
-}
-
-function login(){
-  const users=loadUsers();
-  const u=users.find(x=>x.email===email.value && x.password===password.value);
-  if(!u){ msg.textContent='Wrong login'; return; }
-  mondayReset(u);
-  sessionStorage.setItem('me',JSON.stringify(u));
-  saveUsers(users);
-  showDashboard();
-}
-
-function showDashboard(){
+netlifyIdentity.on('login', async user => {
   loginBox.classList.add('hidden');
   dashboard.classList.remove('hidden');
-  const me=JSON.parse(sessionStorage.getItem('me'));
-  me.quota=Math.max(0,me.quota);
-  document.getElementById('me').textContent=me.email;
-  document.getElementById('myRole').textContent=me.role;
-  document.getElementById('myQuota').textContent=me.quota;
-  document.getElementById('myBar').style.width=(me.quota/MAX[me.role])*100+'%';
+  loadData(user);
+});
 
-  if(me.role==='Management'||me.role==='Ownership'){
-    manageSection.classList.remove('hidden');
-    renderStaff();
-  } else {
-    manageSection.classList.add('hidden');
+async function loadData(user){
+  const token = await user.jwt();
+  const res = await fetch('/.netlify/functions/getData',{
+    headers:{Authorization:`Bearer ${token}`}
+  });
+  const data = await res.json();
+
+  email.textContent = user.email;
+  role.textContent = data.role;
+
+  myTasks.innerHTML='';
+  data.tasks.forEach((t,i)=>{
+    const d=document.createElement('div');
+    d.className='task';
+    d.innerHTML=`${t} <button onclick="completeTask(${i})">Done</button>`;
+    myTasks.appendChild(d);
+  });
+
+  if(data.role==='Ownership'||data.role==='Management'){
+    ownerPanel.classList.remove('hidden');
+    userSelect.innerHTML=data.allUsers.map(u=>`<option>${u}</option>`).join('');
   }
 }
 
-function renderStaff(){
-  const users=loadUsers();
-  staffList.innerHTML='';
-  users.forEach(u=>{
-    const d=document.createElement('div');
-    d.className='staffCard';
-    d.innerHTML=`
-      <b>${u.email}</b><br>
-      Role: ${u.role}<br>
-      Quota: ${u.quota}
-      <div class="bar"><div class="fill" style="width:${(u.quota/MAX[u.role])*100}%"></div></div>
-      <button onclick="changeQuota('${u.email}',1)">+1</button>
-      <button onclick="changeQuota('${u.email}',-1)">-1</button>
-    `;
-    staffList.appendChild(d);
+async function assignTask(){
+  const user = netlifyIdentity.currentUser();
+  const token = await user.jwt();
+  await fetch('/.netlify/functions/updateData',{
+    method:'POST',
+    headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},
+    body:JSON.stringify({
+      target:userSelect.value,
+      task:taskText.value
+    })
   });
+  alert('Task assigned');
 }
 
-window.changeQuota=function(email,delta){
-  const users=loadUsers();
-  const u=users.find(x=>x.email===email);
-  if(!u||u.role==='Ownership') return;
-  u.quota=Math.max(0,u.quota+delta);
-  saveUsers(users);
-  renderStaff();
+async function completeTask(index){
+  const user = netlifyIdentity.currentUser();
+  const token = await user.jwt();
+  await fetch('/.netlify/functions/consumeTask',{
+    method:'POST',
+    headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},
+    body:JSON.stringify({index})
+  });
+  location.reload();
 }
 
-loginBtn.onclick=login;
-logoutBtn.onclick=()=>{ sessionStorage.clear(); location.reload(); }
+function logout(){
+  netlifyIdentity.logout();
+  location.reload();
+}
 
-addStaffBtn.onclick=()=>{
-  const users=loadUsers();
-  users.push({
-    email:newEmail.value,
-    password:newPass.value,
-    role:newRole.value,
-    quota:MAX[newRole.value]
-  });
-  saveUsers(users);
-  renderStaff();
-  newEmail.value=newPass.value='';
-};
-
-if(sessionStorage.getItem('me')) showDashboard();
+netlifyIdentity.on('logout',()=>location.reload());
+loginBox.classList.remove('hidden');
 </script>
 </body>
 </html>
