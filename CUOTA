@@ -1,9 +1,11 @@
+<!-- Include Netlify Identity Widget -->
 <script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
+
 <script>
   // Initialize Netlify Identity
   netlifyIdentity.init();
 
-  // Example roles and weekly max quotas
+  // Weekly max quotas per role
   const roleQuotas = {
     'Ownership': Infinity,
     'Management': 50,
@@ -11,51 +13,58 @@
     'Moderator': 20
   };
 
-  // Get current user
-  let user = netlifyIdentity.currentUser();
-
   // Utility: check if today is Monday
   function isMonday() {
     const today = new Date();
-    return today.getDay() === 1; // 0 = Sunday, 1 = Monday
+    return today.getDay() === 1; // 0=Sunday, 1=Monday
   }
 
-  // Initialize user metadata if missing
+  // Display quota on the page
+  function displayQuota() {
+    const user = netlifyIdentity.currentUser();
+    if (!user) return;
+    const quota = user.user_metadata?.quota ?? 0;
+    document.getElementById('quota').textContent = quota;
+  }
+
+  // Initialize user metadata and reset quota on Monday
   function initUser() {
+    const user = netlifyIdentity.currentUser();
     if (!user) return;
 
-    // Set default metadata if missing
     if (!user.user_metadata) user.user_metadata = {};
-    const role = user.user_metadata.role || 'Moderator';
-    const lastReset = user.user_metadata.lastReset || null;
+
+    // Set default role if missing
+    if (!user.user_metadata.role) user.user_metadata.role = 'Moderator';
+
+    const role = user.user_metadata.role;
+    const lastReset = user.user_metadata.lastReset;
 
     // Reset quota if it's Monday and hasn't been reset today
-    if (isMonday() && lastReset !== new Date().toDateString()) {
+    const todayStr = new Date().toDateString();
+    if (isMonday() && lastReset !== todayStr) {
       user.user_metadata.quota = roleQuotas[role];
-      user.user_metadata.lastReset = new Date().toDateString();
-      user.update(user.user_metadata).then(() => {
-        displayQuota();
-      });
+      user.user_metadata.lastReset = todayStr;
+      user.update({ user_metadata: user.user_metadata })
+        .then(() => displayQuota())
+        .catch(err => console.error('Error updating quota:', err));
     } else if (user.user_metadata.quota === undefined) {
       // First-time setup
       user.user_metadata.quota = roleQuotas[role];
-      user.user_metadata.lastReset = new Date().toDateString();
-      user.update(user.user_metadata).then(() => displayQuota());
+      user.user_metadata.lastReset = todayStr;
+      user.update({ user_metadata: user.user_metadata })
+        .then(() => displayQuota())
+        .catch(err => console.error('Error initializing quota:', err));
     } else {
       displayQuota();
     }
   }
 
-  // Display current quota
-  function displayQuota() {
-    if (!user) return;
-    const quota = user.user_metadata.quota;
-    document.getElementById('quota').textContent = quota;
-  }
-
-  // Check if user can perform action
+  // Check if action is allowed for this user
   function canPerformAction(actionType) {
+    const user = netlifyIdentity.currentUser();
     if (!user) return false;
+
     const role = user.user_metadata.role;
     const quota = user.user_metadata.quota;
 
@@ -70,29 +79,52 @@
     }
   }
 
-  // Reduce quota when an action is performed
+  // Reduce user quota after action
   function reduceQuota(amount = 1) {
+    const user = netlifyIdentity.currentUser();
     if (!user) return;
+
     if (user.user_metadata.role === 'Ownership') return; // unlimited
 
     user.user_metadata.quota = Math.max(0, user.user_metadata.quota - amount);
-    user.update(user.user_metadata).then(() => displayQuota());
+    user.update({ user_metadata: user.user_metadata })
+      .then(() => displayQuota())
+      .catch(err => console.error('Error reducing quota:', err));
   }
 
-  // Example: attach action to a button
+  // Wait until DOM is ready
   document.addEventListener('DOMContentLoaded', () => {
-    initUser();
+    // Check if user is logged in
+    const user = netlifyIdentity.currentUser();
+    if (!user) {
+      // Open login modal if not logged in
+      netlifyIdentity.open();
+      netlifyIdentity.on('login', () => {
+        initUser();
+      });
+    } else {
+      initUser();
+    }
 
-    document.getElementById('actionButton').addEventListener('click', () => {
-      if (!canPerformAction('moderateContent')) {
-        alert('Action not allowed!');
-        return;
-      }
-      reduceQuota();
-      alert('Action performed!');
-    });
+    // Attach action to button
+    const button = document.getElementById('actionButton');
+    if (button) {
+      button.addEventListener('click', () => {
+        if (!canPerformAction('moderateContent')) {
+          alert('Action not allowed or quota exceeded!');
+          return;
+        }
+        reduceQuota();
+        alert('Action performed!');
+      });
+    }
   });
 </script>
+
+<!-- HTML -->
+<p>Your remaining quota: <span id="quota">0</span></p>
+<button id="actionButton">Perform Action</button>
+
 
 <!-- HTML -->
 <p>Your remaining quota: <span id="quota">0</span></p>
