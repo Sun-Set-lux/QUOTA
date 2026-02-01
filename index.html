@@ -4,157 +4,118 @@
 <meta charset="UTF-8">
 <title>Klev’s Studio Staff Portal</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<!-- Netlify Identity -->
 <script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
 
 <style>
-:root {
-  --red:#c40000;
-  --bg:#f4f4f4;
-  --card:#ffffff;
-  --text:#333;
-}
-
-* { box-sizing:border-box; }
-
-body {
+body{
   margin:0;
   font-family:Arial, sans-serif;
-  background:var(--bg);
-  color:var(--text);
+  background:#f4f4f4;
 }
-
-.center {
-  min-height:100vh;
-  display:flex;
-  align-items:center;
-  justify-content:center;
+.card{
+  width:320px;
+  margin:80px auto;
+  background:#fff;
+  padding:20px;
+  border-radius:6px;
+  box-shadow:0 0 12px rgba(0,0,0,.15);
+  border-top:4px solid #c40000;
 }
-
-.card {
-  width:360px;
-  background:var(--card);
-  padding:25px;
-  border-radius:8px;
-  box-shadow:0 10px 25px rgba(0,0,0,.15);
-  border-top:5px solid var(--red);
-}
-
-h1,h2,h3 {
-  margin:0 0 15px;
+h2,h3{
   text-align:center;
-  color:var(--red);
+  color:#c40000;
 }
-
-button {
+button{
   width:100%;
   padding:12px;
   border:none;
-  border-radius:6px;
+  border-radius:4px;
   cursor:pointer;
   font-size:15px;
 }
-
-.primary { background:var(--red); color:#fff; }
-.secondary { background:#444; color:#fff; }
-.danger { background:#a80000; color:#fff; }
-
-.hidden { display:none; }
-
-.dashboard {
-  max-width:900px;
-  margin:40px auto;
-  padding:20px;
-}
-
-.top {
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-  margin-bottom:20px;
-}
-
-.box {
-  background:#fff;
-  border-radius:8px;
-  padding:20px;
-  box-shadow:0 5px 15px rgba(0,0,0,.1);
-  margin-bottom:20px;
-}
-
-.task {
-  padding:12px;
+.primary{background:#c40000;color:#fff;}
+.secondary{background:#444;color:#fff;}
+.hidden{display:none;}
+.task{
   border:1px solid #ddd;
-  border-radius:6px;
-  margin-bottom:10px;
+  padding:10px;
+  border-radius:5px;
+  margin-top:10px;
   display:flex;
   justify-content:space-between;
-  align-items:center;
 }
-
-.task.done { opacity:.6; }
-
-textarea, select {
+textarea,select{
   width:100%;
   padding:10px;
-  border-radius:6px;
-  border:1px solid #ccc;
-  margin-top:8px;
+  margin-top:6px;
 }
-
-small { color:#777; }
+.top{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+}
+.dashboard{
+  max-width:800px;
+  margin:40px auto;
+  padding:0 20px;
+}
+.box{
+  background:#fff;
+  padding:20px;
+  border-radius:6px;
+  box-shadow:0 0 10px rgba(0,0,0,.1);
+  margin-bottom:20px;
+}
+small{color:#666;}
 </style>
 </head>
 <body>
 
 <!-- LOGIN -->
-<div class="center" id="loginView">
-  <div class="card">
-    <h1>Klev’s Studio</h1>
-    <p style="text-align:center;">Staff Portal</p>
-    <button class="primary" onclick="netlifyIdentity.open()">Login</button>
-    <small style="display:block;text-align:center;margin-top:10px;">
-      Authorized staff only
-    </small>
-  </div>
+<div class="card" id="loginBox">
+  <h2>Klev’s Studio</h2>
+  <p style="text-align:center;">Staff Login</p>
+  <button class="primary" onclick="netlifyIdentity.open()">Login</button>
+  <small style="display:block;text-align:center;margin-top:10px;">
+    Authorized staff only
+  </small>
 </div>
 
 <!-- DASHBOARD -->
-<div class="dashboard hidden" id="dash">
+<div class="dashboard hidden" id="dashboard">
   <div class="top">
     <div>
-      <b id="email"></b><br>
-      <small id="role"></small>
+      <b id="userEmail"></b><br>
+      <small id="userRole"></small>
     </div>
-    <button class="danger" onclick="logout()">Logout</button>
+    <button class="secondary" onclick="logout()">Logout</button>
   </div>
 
-  <!-- MY TASKS -->
   <div class="box">
     <h3>Your Tasks</h3>
     <div id="myTasks"></div>
-    <small id="emptyMsg"></small>
+    <small id="noTasks"></small>
   </div>
 
-  <!-- OWNER / MANAGEMENT -->
-  <div class="box hidden" id="adminBox">
+  <div class="box hidden" id="adminPanel">
     <h3>Assign Task</h3>
-    <label>Staff Member</label>
-    <select id="userSelect"></select>
-    <label>Task</label>
+    <select id="targetUser"></select>
     <textarea id="taskText" placeholder="What they need to do"></textarea>
-    <button class="secondary" style="margin-top:10px;" onclick="assignTask()">Assign Task</button>
+    <button class="secondary" onclick="assignTask()">Assign</button>
   </div>
 </div>
 
 <script>
 netlifyIdentity.init();
 
-const loginView = document.getElementById('loginView');
-const dash = document.getElementById('dash');
+const loginBox = document.getElementById('loginBox');
+const dashboard = document.getElementById('dashboard');
 
 netlifyIdentity.on('login', user => {
-  loginView.classList.add('hidden');
-  dash.classList.remove('hidden');
+  loginBox.classList.add('hidden');
+  dashboard.classList.remove('hidden');
   loadData(user);
 });
 
@@ -162,10 +123,66 @@ netlifyIdentity.on('logout', () => location.reload());
 
 async function loadData(user){
   const token = await user.jwt();
-  const res = await fetch('/.netlify/functions/getData', {
-    headers:{ Authorization:`Bearer ${token}` }
+
+  const res = await fetch('/.netlify/functions/getData',{
+    headers:{Authorization:`Bearer ${token}`}
   });
   const data = await res.json();
 
-  email.textContent = user.email;
-  role.te
+  userEmail.textContent = user.email;
+  userRole.textContent = data.role;
+
+  myTasks.innerHTML='';
+  if(data.tasks.length === 0){
+    noTasks.textContent = 'No tasks assigned yet.';
+  } else {
+    noTasks.textContent = '';
+    data.tasks.forEach((t,i)=>{
+      const div = document.createElement('div');
+      div.className='task';
+      div.innerHTML = `
+        <span>${t}</span>
+        <button onclick="completeTask(${i})">Done</button>
+      `;
+      myTasks.appendChild(div);
+    });
+  }
+
+  if(data.role === 'Ownership' || data.role === 'Management'){
+    adminPanel.classList.remove('hidden');
+    targetUser.innerHTML = data.allUsers.map(u=>`<option>${u}</option>`).join('');
+  }
+}
+
+async function assignTask(){
+  const user = netlifyIdentity.currentUser();
+  const token = await user.jwt();
+  await fetch('/.netlify/functions/updateData',{
+    method:'POST',
+    headers:{'Content-Type':'application/json', Authorization:`Bearer ${token}`},
+    body:JSON.stringify({
+      target:targetUser.value,
+      task:taskText.value
+    })
+  });
+  taskText.value='';
+  alert('Task assigned');
+}
+
+async function completeTask(index){
+  const user = netlifyIdentity.currentUser();
+  const token = await user.jwt();
+  await fetch('/.netlify/functions/consumeTask',{
+    method:'POST',
+    headers:{'Content-Type':'application/json', Authorization:`Bearer ${token}`},
+    body:JSON.stringify({index})
+  });
+  location.reload();
+}
+
+function logout(){
+  netlifyIdentity.logout();
+}
+</script>
+</body>
+</html>
