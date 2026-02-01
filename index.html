@@ -1,92 +1,215 @@
-<p>Your remaining quota: <span id="quota">0</span></p>
-<button id="actionButton">Perform Action</button>
-
-<script>
-  // Roles and weekly quotas
-  const roleQuotas = {
-    'Ownership': Infinity,
-    'Management': 50,
-    'Administrator': 30,
-    'Moderator': 20
-  };
-
-  // Simulated current user (you can modify role here)
-  let user = {
-    role: 'Moderator', // Change to test other roles
-    quota: null,
-    lastReset: null
-  };
-
-  // Load user from localStorage
-  function loadUser() {
-    const stored = localStorage.getItem('staffUser');
-    if (stored) user = JSON.parse(stored);
-  }
-
-  // Save user to localStorage
-  function saveUser() {
-    localStorage.setItem('staffUser', JSON.stringify(user));
-  }
-
-  // Check if today is Monday
-  function isMonday() {
-    return new Date().getDay() === 1;
-  }
-
-  // Reset quota if Monday
-  function resetQuota() {
-    const todayStr = new Date().toDateString();
-    if ((isMonday() && user.lastReset !== todayStr) || user.quota === null) {
-      user.quota = roleQuotas[user.role];
-      user.lastReset = todayStr;
-      saveUser();
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Staff Quota Dashboard</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f4f9;
+      padding: 20px;
+      color: #333;
     }
-  }
 
-  // Display quota
-  function displayQuota() {
-    document.getElementById('quota').textContent = user.quota;
-  }
-
-  // Check if action is allowed
-  function canPerformAction(actionType) {
-    if (user.quota <= 0 && user.role !== 'Ownership') return false;
-
-    switch(user.role) {
-      case 'Ownership': return true;
-      case 'Management': return actionType !== 'manageOwnership';
-      case 'Administrator': return actionType !== 'manageRoles';
-      case 'Moderator': return actionType === 'moderateContent';
-      default: return false;
+    h1 {
+      color: #4a90e2;
     }
-  }
 
-  // Reduce quota after action
-  function reduceQuota(amount = 1) {
-    if (user.role === 'Ownership') return;
-    user.quota = Math.max(0, user.quota - amount);
-    saveUser();
-    displayQuota();
-  }
+    .quota-container {
+      background: #fff;
+      border-radius: 10px;
+      padding: 20px;
+      max-width: 400px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+      margin-bottom: 20px;
+    }
 
-  // Initialize
-  document.addEventListener('DOMContentLoaded', () => {
-    loadUser();
-    resetQuota();
-    displayQuota();
+    .quota-bar-bg {
+      width: 100%;
+      height: 25px;
+      background: #eee;
+      border-radius: 12px;
+      overflow: hidden;
+      margin: 10px 0;
+    }
 
-    document.getElementById('actionButton').addEventListener('click', () => {
-      if (!canPerformAction('moderateContent')) {
-        alert('Action not allowed or quota exceeded!');
-        return;
+    .quota-bar-fill {
+      height: 100%;
+      width: 0;
+      background: #4a90e2;
+      transition: width 0.5s;
+    }
+
+    .actions {
+      margin-top: 20px;
+    }
+
+    .action-btn {
+      padding: 10px 20px;
+      background: #4a90e2;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      margin-right: 10px;
+      margin-bottom: 10px;
+    }
+
+    .action-btn:disabled {
+      background: #aaa;
+      cursor: not-allowed;
+    }
+
+    .status {
+      margin-top: 10px;
+    }
+
+    .status span {
+      display: inline-block;
+      margin-right: 10px;
+      padding: 5px 10px;
+      border-radius: 5px;
+      color: #fff;
+    }
+
+    .done { background: #4caf50; }
+    .pending { background: #f39c12; }
+    .quota-low { background: #e74c3c; }
+
+  </style>
+</head>
+<body>
+  <h1>Staff Quota Dashboard</h1>
+
+  <div class="quota-container">
+    <p><strong>Role:</strong> <span id="role">-</span></p>
+    <p><strong>Remaining Quota:</strong> <span id="quota">0</span></p>
+    <div class="quota-bar-bg">
+      <div id="quotaBar" class="quota-bar-fill"></div>
+    </div>
+    <div class="status">
+      <span id="statusText">Initializing...</span>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button class="action-btn" data-action="moderateContent">Moderate Content</button>
+    <button class="action-btn" data-action="manageRoles">Manage Roles</button>
+    <button class="action-btn" data-action="manageOwnership">Manage Ownership</button>
+  </div>
+
+  <script>
+    // Roles and weekly quotas
+    const roleQuotas = {
+      'Ownership': Infinity,
+      'Management': 50,
+      'Administrator': 30,
+      'Moderator': 20
+    };
+
+    // Tasks done tracker
+    let tasksDone = {
+      moderateContent: 0,
+      manageRoles: 0,
+      manageOwnership: 0
+    };
+
+    // Simulated current user (change role here)
+    let user = {
+      role: 'Moderator', // Change to test other roles
+      quota: null,
+      lastReset: null
+    };
+
+    // Load user from localStorage
+    function loadUser() {
+      const stored = localStorage.getItem('staffUser');
+      if (stored) user = JSON.parse(stored);
+    }
+
+    function saveUser() {
+      localStorage.setItem('staffUser', JSON.stringify(user));
+    }
+
+    function isMonday() {
+      return new Date().getDay() === 1;
+    }
+
+    function resetQuota() {
+      const todayStr = new Date().toDateString();
+      if ((isMonday() && user.lastReset !== todayStr) || user.quota === null) {
+        user.quota = roleQuotas[user.role];
+        user.lastReset = todayStr;
+        tasksDone = { moderateContent: 0, manageRoles: 0, manageOwnership: 0 };
+        saveUser();
       }
-      reduceQuota();
-      alert('Action performed!');
+    }
+
+    function updateUI() {
+      document.getElementById('role').textContent = user.role;
+      document.getElementById('quota').textContent = user.quota === Infinity ? '∞' : user.quota;
+
+      // Update quota bar
+      const maxQuota = roleQuotas[user.role];
+      const width = maxQuota === Infinity ? 100 : (user.quota / maxQuota) * 100;
+      document.getElementById('quotaBar').style.width = width + '%';
+
+      // Update status text
+      const statusEl = document.getElementById('statusText');
+      if (user.quota === 0 && user.role !== 'Ownership') {
+        statusEl.textContent = 'Quota exhausted!';
+        statusEl.className = 'quota-low';
+      } else {
+        statusEl.textContent = 'Quota available';
+        statusEl.className = 'pending';
+      }
+
+      // Enable/disable buttons based on role
+      document.querySelectorAll('.action-btn').forEach(btn => {
+        const action = btn.getAttribute('data-action');
+        if (!canPerformAction(action)) btn.disabled = true;
+        else btn.disabled = false;
+      });
+    }
+
+    function canPerformAction(actionType) {
+      if (user.quota <= 0 && user.role !== 'Ownership') return false;
+
+      switch(user.role) {
+        case 'Ownership': return true;
+        case 'Management': return actionType !== 'manageOwnership';
+        case 'Administrator': return actionType !== 'manageRoles';
+        case 'Moderator': return actionType === 'moderateContent';
+        default: return false;
+      }
+    }
+
+    function performAction(actionType) {
+      if (!canPerformAction(actionType)) return;
+
+      tasksDone[actionType] += 1;
+
+      if (user.role !== 'Ownership') {
+        user.quota = Math.max(0, user.quota - 1);
+      }
+
+      saveUser();
+      updateUI();
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      loadUser();
+      resetQuota();
+      updateUI();
+
+      document.querySelectorAll('.action-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const action = btn.getAttribute('data-action');
+          performAction(action);
+          alert(`Action "${action}" performed!`);
+        });
+      });
     });
-  });
-</script>
-
-</script>
-
-<p>Your remaining quota: <span id="quota">0</span></p>
-<button id="actionButton">Perform Action</button>
+  </script>
+</body>
+</html>
