@@ -1,215 +1,118 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Staff Quota Dashboard</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      background: #f4f4f9;
-      padding: 20px;
-      color: #333;
-    }
-
-    h1 {
-      color: #4a90e2;
-    }
-
-    .quota-container {
-      background: #fff;
-      border-radius: 10px;
-      padding: 20px;
-      max-width: 400px;
-      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-      margin-bottom: 20px;
-    }
-
-    .quota-bar-bg {
-      width: 100%;
-      height: 25px;
-      background: #eee;
-      border-radius: 12px;
-      overflow: hidden;
-      margin: 10px 0;
-    }
-
-    .quota-bar-fill {
-      height: 100%;
-      width: 0;
-      background: #4a90e2;
-      transition: width 0.5s;
-    }
-
-    .actions {
-      margin-top: 20px;
-    }
-
-    .action-btn {
-      padding: 10px 20px;
-      background: #4a90e2;
-      color: #fff;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-      margin-right: 10px;
-      margin-bottom: 10px;
-    }
-
-    .action-btn:disabled {
-      background: #aaa;
-      cursor: not-allowed;
-    }
-
-    .status {
-      margin-top: 10px;
-    }
-
-    .status span {
-      display: inline-block;
-      margin-right: 10px;
-      padding: 5px 10px;
-      border-radius: 5px;
-      color: #fff;
-    }
-
-    .done { background: #4caf50; }
-    .pending { background: #f39c12; }
-    .quota-low { background: #e74c3c; }
-
-  </style>
+<meta charset="UTF-8">
+<title>Staff Quota Dashboard</title>
+<style>
+  body { font-family: Arial; background:#f4f4f9; padding:20px; color:#333; }
+  h1 { color:#4a90e2; }
+  .hidden { display:none; }
+  .quota-container { background:#fff; padding:20px; border-radius:10px; max-width:500px; margin:20px auto; box-shadow:0 4px 10px rgba(0,0,0,0.1);}
+  .quota-bar-bg { width:100%; height:25px; background:#eee; border-radius:12px; overflow:hidden; margin:10px 0;}
+  .quota-bar-fill { height:100%; width:0%; background:#4a90e2; transition: width 0.5s;}
+  .actions { margin-top:20px; }
+  .action-btn { padding:10px 20px; background:#4a90e2; color:#fff; border:none; border-radius:8px; cursor:pointer; margin:5px;}
+  .action-btn:disabled { background:#aaa; cursor:not-allowed; }
+  .status span { display:inline-block; padding:5px 10px; border-radius:5px; color:#fff;}
+  .done { background:#4caf50; } .pending { background:#f39c12; } .quota-low { background:#e74c3c; }
+</style>
+<script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
 </head>
 <body>
-  <h1>Staff Quota Dashboard</h1>
+<div id="loginPage">
+<h1>Staff Login</h1>
+<button id="loginBtn">Login</button>
+</div>
 
-  <div class="quota-container">
-    <p><strong>Role:</strong> <span id="role">-</span></p>
-    <p><strong>Remaining Quota:</strong> <span id="quota">0</span></p>
-    <div class="quota-bar-bg">
-      <div id="quotaBar" class="quota-bar-fill"></div>
-    </div>
-    <div class="status">
-      <span id="statusText">Initializing...</span>
-    </div>
-  </div>
+<div id="dashboard" class="hidden">
+<h1>Quota Dashboard</h1>
+<p>Role: <span id="role"></span></p>
+<p>Quota remaining: <span id="quota"></span></p>
+<div class="quota-bar-bg"><div id="quotaBar" class="quota-bar-fill"></div></div>
+<div class="status"><span id="statusText">Initializing...</span></div>
 
-  <div class="actions">
-    <button class="action-btn" data-action="moderateContent">Moderate Content</button>
-    <button class="action-btn" data-action="manageRoles">Manage Roles</button>
-    <button class="action-btn" data-action="manageOwnership">Manage Ownership</button>
-  </div>
+<div class="actions">
+<button data-action="moderateContent" class="action-btn">Moderate Content</button>
+<button data-action="manageRoles" class="action-btn">Manage Roles</button>
+<button data-action="manageOwnership" class="action-btn">Manage Ownership</button>
+</div>
 
-  <script>
-    // Roles and weekly quotas
-    const roleQuotas = {
-      'Ownership': Infinity,
-      'Management': 50,
-      'Administrator': 30,
-      'Moderator': 20
-    };
+<button id="logoutBtn" style="background:#e74c3c; color:#fff; padding:10px 20px; border:none; border-radius:8px;">Logout</button>
+</div>
 
-    // Tasks done tracker
-    let tasksDone = {
-      moderateContent: 0,
-      manageRoles: 0,
-      manageOwnership: 0
-    };
+<script>
+netlifyIdentity.init();
+let currentUser = null;
 
-    // Simulated current user (change role here)
-    let user = {
-      role: 'Moderator', // Change to test other roles
-      quota: null,
-      lastReset: null
-    };
+const loginPage = document.getElementById('loginPage');
+const dashboard = document.getElementById('dashboard');
+const roleEl = document.getElementById('role');
+const quotaEl = document.getElementById('quota');
+const quotaBar = document.getElementById('quotaBar');
+const statusText = document.getElementById('statusText');
+const actionBtns = document.querySelectorAll('.action-btn');
 
-    // Load user from localStorage
-    function loadUser() {
-      const stored = localStorage.getItem('staffUser');
-      if (stored) user = JSON.parse(stored);
-    }
+const maxQuotas = {Ownership:Infinity, Management:50, Administrator:30, Moderator:20};
+const roleActions = {
+  Ownership:['moderateContent','manageRoles','manageOwnership'],
+  Management:['moderateContent','manageRoles'],
+  Administrator:['moderateContent','manageOwnership'],
+  Moderator:['moderateContent']
+};
 
-    function saveUser() {
-      localStorage.setItem('staffUser', JSON.stringify(user));
-    }
+document.getElementById('loginBtn').addEventListener('click',()=>netlifyIdentity.open('login'));
+document.getElementById('logoutBtn').addEventListener('click',()=>{
+  netlifyIdentity.logout();
+  loginPage.classList.remove('hidden'); dashboard.classList.add('hidden');
+  currentUser = null;
+});
 
-    function isMonday() {
-      return new Date().getDay() === 1;
-    }
+// After login
+netlifyIdentity.on('login', async user=>{
+  currentUser=user;
+  loginPage.classList.add('hidden'); dashboard.classList.remove('hidden');
+  await loadQuota();
+});
 
-    function resetQuota() {
-      const todayStr = new Date().toDateString();
-      if ((isMonday() && user.lastReset !== todayStr) || user.quota === null) {
-        user.quota = roleQuotas[user.role];
-        user.lastReset = todayStr;
-        tasksDone = { moderateContent: 0, manageRoles: 0, manageOwnership: 0 };
-        saveUser();
-      }
-    }
+// Load quota from Identity metadata
+async function loadQuota(){
+  const token = await currentUser.jwt();
+  const res = await fetch('/.netlify/functions/getQuota',{headers:{Authorization:`Bearer ${token}`}});
+  const data = await res.json();
+  currentUser.role = data.role;
+  currentUser.quota = data.quota;
+  currentUser.lastReset = data.lastReset;
+  updateUI();
+}
 
-    function updateUI() {
-      document.getElementById('role').textContent = user.role;
-      document.getElementById('quota').textContent = user.quota === Infinity ? '∞' : user.quota;
+// Update dashboard
+function updateUI(){
+  roleEl.textContent=currentUser.role;
+  quotaEl.textContent=currentUser.quota===Infinity?'∞':currentUser.quota;
+  quotaBar.style.width=currentUser.quota===Infinity?'100%':Math.min(100,(currentUser.quota/maxQuotas[currentUser.role])*100)+'%';
+  statusText.textContent=currentUser.quota===0?'Quota exhausted!':'Quota available';
+  statusText.className=currentUser.quota===0?'quota-low':'pending';
+  actionBtns.forEach(btn=>{
+    btn.disabled=!roleActions[currentUser.role].includes(btn.dataset.action) || (currentUser.quota<=0 && currentUser.role!=='Ownership');
+  });
+}
 
-      // Update quota bar
-      const maxQuota = roleQuotas[user.role];
-      const width = maxQuota === Infinity ? 100 : (user.quota / maxQuota) * 100;
-      document.getElementById('quotaBar').style.width = width + '%';
-
-      // Update status text
-      const statusEl = document.getElementById('statusText');
-      if (user.quota === 0 && user.role !== 'Ownership') {
-        statusEl.textContent = 'Quota exhausted!';
-        statusEl.className = 'quota-low';
-      } else {
-        statusEl.textContent = 'Quota available';
-        statusEl.className = 'pending';
-      }
-
-      // Enable/disable buttons based on role
-      document.querySelectorAll('.action-btn').forEach(btn => {
-        const action = btn.getAttribute('data-action');
-        if (!canPerformAction(action)) btn.disabled = true;
-        else btn.disabled = false;
-      });
-    }
-
-    function canPerformAction(actionType) {
-      if (user.quota <= 0 && user.role !== 'Ownership') return false;
-
-      switch(user.role) {
-        case 'Ownership': return true;
-        case 'Management': return actionType !== 'manageOwnership';
-        case 'Administrator': return actionType !== 'manageRoles';
-        case 'Moderator': return actionType === 'moderateContent';
-        default: return false;
-      }
-    }
-
-    function performAction(actionType) {
-      if (!canPerformAction(actionType)) return;
-
-      tasksDone[actionType] += 1;
-
-      if (user.role !== 'Ownership') {
-        user.quota = Math.max(0, user.quota - 1);
-      }
-
-      saveUser();
-      updateUI();
-    }
-
-    document.addEventListener('DOMContentLoaded', () => {
-      loadUser();
-      resetQuota();
-      updateUI();
-
-      document.querySelectorAll('.action-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const action = btn.getAttribute('data-action');
-          performAction(action);
-          alert(`Action "${action}" performed!`);
-        });
-      });
+// Action buttons
+actionBtns.forEach(btn=>{
+  btn.addEventListener('click', async ()=>{
+    const action=btn.dataset.action;
+    const token=await currentUser.jwt();
+    const res=await fetch('/.netlify/functions/updateQuota',{
+      method:'POST',
+      headers:{'Content-Type':'application/json', Authorization:`Bearer ${token}`},
+      body:JSON.stringify({action})
     });
-  </script>
+    const data=await res.json();
+    currentUser.quota=data.quota;
+    updateUI();
+    alert(`Action "${action}" done! Remaining quota: ${data.quota}`);
+  });
+});
+</script>
 </body>
 </html>
